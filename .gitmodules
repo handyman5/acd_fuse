@@ -1,0 +1,3 @@
+[submodule "pyacd"]
+	path = pyacd
+	url = git://github.com/handyman5/pyamazonclouddrive-clone.git
