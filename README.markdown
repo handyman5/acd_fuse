@@ -1,6 +1,6 @@
 Introduction
 ============
-acd_fuse is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](https://github.com/handyman5/pyamazonclouddrive-clone). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files if the --size-only flag is provided (since you can't change mtimes on Cloud Drive).
+acd_fuse is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](http://code.google.com/p/pyamazonclouddrive/). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files if the --size-only flag is provided (since you can't change mtimes on Cloud Drive).
 
 Standard Disclaimer
 ===================
