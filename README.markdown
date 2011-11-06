@@ -23,17 +23,17 @@ Standard FUSE mountpoint stuff:
 
 Mount Options
 -------------
-- email: your Amazon Cloud Drive login email
-- password: your Amazon Cloud Drive login password
-- sessionfile: the full path of a file to store the session cookie in
-- cache: whether to cache downloaded files in memory, so "re-downloading" them is instantaneous. Downside: uses way more memory.
+- `email`: your Amazon Cloud Drive login email
+- `password`: your Amazon Cloud Drive login password
+- `sessionfile`: the full path of a file to store the session cookie in
+- `cache`: whether to cache downloaded files in memory, so "re-downloading" them is instantaneous. Downside: uses way more memory.
 
 License
 =======
-acd_fuse is released under a **MIT License**, in keeping with the library it uses for accessing Amazon Cloud Drive, [PyAmazonCloudDrive](http://code.google.com/p/pyamazonclouddrive/). That guy (whose name I believe to be Sakurai Youhei <http://d.hatena.ne.jp/sakurai_youhei/>, did all the hard work and deserves all the credit for writing a great API.
+acd_fuse is released under a **MIT License**, in keeping with the library it uses for accessing Amazon Cloud Drive, [PyAmazonCloudDrive](http://code.google.com/p/pyamazonclouddrive/). That guy (whose name I believe to be Sakurai Youhei <http://d.hatena.ne.jp/sakurai_youhei/>), did all the hard work and deserves all the credit for writing a great API.
 
 Contact
 =======
 You can email me at comptona@gmail.com.
 
-To report bugs or request features, please use the **[Issues](https://github.com/acd_fuse/poodledo/issues)** feature.
+To report bugs or request features, please use the **[Issues](https://github.com/handyman5/acd_fuse/issues)** feature.
