@@ -38,10 +38,16 @@ class ACDFS(fuse.Fuse):
 
     def main(self):
         if self.sessionfile:
-            sessfile = open(self.sessionfile, "rb")
-            session = pickle.load(sessfile)
-            sessfile.close
-            pyacd.login(session=session)
+            try:
+                sessfile = open(self.sessionfile, "rb")
+                session = pickle.load(sessfile)
+                sessfile.close()
+                self.session = pyacd.login(session=session)
+            except IOError:
+                sessfile = open(self.sessionfile, "wb")
+                self.session = pyacd.login(self.email, self.password)
+                pickle.dump(self.session, sessfile)
+                sessfile.close()
         else:
             self.session = pyacd.login(self.email, self.password)
         fuse.Fuse.main(self)
@@ -240,5 +246,4 @@ if __name__ == '__main__':
                          help="Cached session file, to avoid reaching eight-device limit")
 
     fs.parse(values=fs, errex=1)
-    print fs.cache
     fs.main()
