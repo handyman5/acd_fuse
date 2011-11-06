@@ -6,38 +6,49 @@ from time import time
 from stat import S_IFDIR, S_IFREG
 from errno import *
 import fuse
-import pyacd
 import os.path
+import pickle
+
+try:
+    import pyacd
+except ImportError:
+    from sys import path
+    path.append('pyacd')
+    import pyacd
 
 fuse.fuse_python_api = (0, 2)
-
-DEBUG = True
 
 folder_types = ["ROOT", "FOLDER", "RECYCLE"]
 
 class ACDFS(fuse.Fuse):
     api = None
-    session = None
+    cache = None
     email = None
     password = None
+    session = None
+    sessionfile = None
 
-    infocache = {}
     dircache = {}
     filecache = {}
+    infocache = {}
 
     def __init__(self, session=None, *args, **kw):
         fuse.Fuse.__init__(self, *args, **kw)
         self.api = pyacd.api
-        if DEBUG: print 'Init complete.'
 
     def main(self):
-        self.session = pyacd.login(self.email, self.password)
+        if self.sessionfile:
+            sessfile = open(self.sessionfile, "rb")
+            session = pickle.load(sessfile)
+            sessfile.close
+            pyacd.login(session=session)
+        else:
+            self.session = pyacd.login(self.email, self.password)
         fuse.Fuse.main(self)
 
     def getinfo(self, path):
         path = path.decode('utf_8')
         if path not in self.infocache:
-            if DEBUG: print "*** CACHE MISS on path", path
             info = self.api.get_info_by_path(path)
             self.infocache[path] = info
         return self.infocache[path]
@@ -58,7 +69,6 @@ class ACDFS(fuse.Fuse):
 
     def getattr(self, path):
         path = path.decode('utf_8')
-        if DEBUG: print 'called getattr:', path
 
         head, tail = os.path.split(path)
         nopaths = ['.git', 'objects']
@@ -89,7 +99,6 @@ class ACDFS(fuse.Fuse):
 
     def readdir(self, path, offset):
         path = path.decode('utf_8')
-        if DEBUG: print 'readdir called:', path
 
         yield fuse.Direntry('.')
         yield fuse.Direntry('..')
@@ -100,7 +109,6 @@ class ACDFS(fuse.Fuse):
         else:
             info = self.getinfo(path)
             if info.Type not in folder_types:
-                if DEBUG: print path, " is not a folder!"
                 raise StopIteration
 
             folder = self.api.list_by_id(info.object_id)
@@ -112,7 +120,9 @@ class ACDFS(fuse.Fuse):
 
     def read(self, path, size, offset):
         path = path.decode('utf_8')
-        if DEBUG: print 'read called:', path
+
+        if not self.api.can_device_download():
+            return -EPERM
 
         data = None
         if path not in self.filecache:
@@ -126,12 +136,12 @@ class ACDFS(fuse.Fuse):
                 size = file_size - offset
             return data[offset:offset+size]
         else:
-            #filecache.pop(path)
+            if not self.cache:
+                filecache.pop(path)
             return ''
 
     def unlink(self, path):
         path = path.decode('utf_8')
-        if DEBUG: print 'unlink called:', path
 
         info = self.getinfo(path)
         self.api.remove_bulk_by_id([info.object_id])
@@ -143,12 +153,10 @@ class ACDFS(fuse.Fuse):
 
     def rmdir(self, path):
         path = path.decode('utf_8')
-        if DEBUG: print 'rmdir called:', path
         self.unlink(path)
 
     def mkdir(self, path, mode):
         path = path.decode('utf_8')
-        if DEBUG: print 'mkdir called:', path
 
         head, tail = os.path.split(path)
         newdir = self.api.create_by_path(head, tail, Type=pyacd.types.FOLDER)
@@ -160,7 +168,6 @@ class ACDFS(fuse.Fuse):
     def rename(self, path1, path2):
         path1 = path1.decode('utf_8')
         path2 = path2.decode('utf_8')
-        if DEBUG: print 'rename called: %s -> %s' % (path1, path2)
 
         head, tail = os.path.split(path2)
 
@@ -182,14 +189,12 @@ class ACDFS(fuse.Fuse):
 
     def create(self, path, flags, mode):
         path = path.decode('utf_8')
-        if DEBUG: print 'create called:', path
 
         head, tail = os.path.split(path)
         self.infocache[path] = self.api.create_by_path(head, tail)
 
     def write(self, path, buf, offset):
         path = path.decode('utf_8')
-        if DEBUG: print "write \"%s\" %u bytes, to offset %u" % (path, len(buf), offset)
 
         if path not in self.filecache:
             self.filecache[path] = buf
@@ -201,20 +206,23 @@ class ACDFS(fuse.Fuse):
         pass
 
     def release(self, path, flags):
+        buf = None
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
         newfile = self.infocache[path]
-        buf = self.filecache[path]
-        url = self.api.get_upload_url_by_id(newfile.object_id, len(buf))
-        result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename, buf)
-        result = self.api.complete_file_upload_by_id(url.object_id, url.storage_key)
+        if newfile.status == "PENDING":
+            buf = self.filecache[path]
+            url = self.api.get_upload_url_by_id(newfile.object_id, len(buf))
+            result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename, buf)
+            result = self.api.complete_file_upload_by_id(url.object_id, url.storage_key)
 
         if dirname in self.dircache:
             self.dircache.pop(dirname)
         if path in self.infocache:
             self.infocache.pop(path)
-        self.filecache.pop(path)
-        return len(buf)
+        if path in self.filecache:
+            self.filecache.pop(path)
+        return buf and len(buf) or 0
 
 
 if __name__ == '__main__':
@@ -222,10 +230,15 @@ if __name__ == '__main__':
     fs.flags = 0
     fs.multithreaded = 0
 
+    fs.parser.add_option(mountopt="cache", metavar="CACHE",
+                         help="keep downloaded files in memory for quicker re-download")
     fs.parser.add_option(mountopt="email", metavar="EMAIL",
                          help="EMAIL login for Amazon Cloud Drive")
     fs.parser.add_option(mountopt="password", metavar="PASSWORD",
                          help="PASSWORD password for Amazon Cloud Drive")
+    fs.parser.add_option(mountopt="sessionfile", metavar="SESSION",
+                         help="Cached session file, to avoid reaching eight-device limit")
 
     fs.parse(values=fs, errex=1)
+    print fs.cache
     fs.main()
