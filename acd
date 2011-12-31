@@ -1,13 +1,16 @@
 #!/usr/bin/python
 
-# rsync is supported with the --size-only flag:  rsync -avP --size-only /localfiles /acdfiles
-
-from time import time
-from stat import S_IFDIR, S_IFREG
+from copy import deepcopy
 from errno import *
+from stat import S_IFDIR, S_IFREG
+from time import time
 import fuse
+import hashlib
+import json
+import logging
+import os
 import os.path
-import pickle
+import tempfile
 
 try:
     import pyacd
@@ -18,47 +21,172 @@ except ImportError:
 
 fuse.fuse_python_api = (0, 2)
 
+myname = "acd_fuse"
+
 folder_types = ["ROOT", "FOLDER", "RECYCLE"]
+
+log = logging.getLogger(myname)
 
 class ACDFS(fuse.Fuse):
     api = None
     cache = None
+    download = None
     email = None
+    log = None
     password = None
     session = None
     sessionfile = None
+    tempdir = None
 
     dircache = {}
-    filecache = {}
     infocache = {}
 
     def __init__(self, session=None, *args, **kw):
+        '''Initializes an Amazon Cloud Drive FUSE filesystem.
+
+        :param session: a Session object to create the FS with (optional)
+        :type session: Session
+        '''
         fuse.Fuse.__init__(self, *args, **kw)
         self.api = pyacd.api
+        self.tempdir = os.path.join(tempfile.gettempdir(), myname)
+        if not os.path.exists(self.tempdir): os.mkdir(self.tempdir)
+        self.sessionfile = os.path.join(self.tempdir, "sessionfile")
+
+        # setup logging
+        self.log = logging.getLogger(myname)
+        hdlr = logging.FileHandler(os.path.join(self.tempdir, 'debug.log'))
+        self.log.addHandler(hdlr)
+        self.log.setLevel(logging.DEBUG)
 
     def main(self):
-        if self.sessionfile:
-            try:
-                sessfile = open(self.sessionfile, "rb")
-                session = pickle.load(sessfile)
-                sessfile.close()
+        try:
+            print "Trying to login from cached sessionfile %s" % self.sessionfile
+            with open(self.sessionfile, "r") as sessfile:
+                session = pyacd.auth.Session()
+                session.__dict__ = json.load(sessfile)
                 self.session = pyacd.login(session=session)
-            except IOError:
-                sessfile = open(self.sessionfile, "wb")
+            if not self.session.is_valid() or not self.session.is_logined():
+                raise ValueError
+        except (IOError, ValueError, pyacd.exception.PyAmazonCloudDriveError):
+            print "Cached session failed; trying auth login"
+            if not self.email or not self.password:
+                # if no email or password and they're needed, error out and die
+                raise ValueError("No login information provided; try again with mount options 'email' and 'password'")
+            with open(self.sessionfile, "w") as sessfile:
                 self.session = pyacd.login(self.email, self.password)
-                pickle.dump(self.session, sessfile)
-                sessfile.close()
-        else:
-            self.session = pyacd.login(self.email, self.password)
+                json.dump(self.session.__dict__, sessfile)
+        print "Login successful; starting filesystem"
+        self.download = self.api.can_device_download()
+
         fuse.Fuse.main(self)
 
     def getinfo(self, path):
+        '''Retrieve an Info object for the given path, either from cache or from ACD.
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        :returns: an Info object representing the path
+        '''
         path = path.decode('utf_8')
+        self.log.debug("getinfo: path %s" % path)
         if path not in self.infocache:
+            self.log.debug("  lookup failed for path %s" % path)
             info = self.api.get_info_by_path(path)
             self.infocache[path] = info
         return self.infocache[path]
 
+    #####
+    # Local filecache
+    #####
+    def cache_path(self, path):
+        '''Resolve the ACD path into a filename in local cache
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        :returns: the local path to the cached file
+        '''
+        path = path.decode('utf_8')
+        self.log.debug("check_filecache: path %s" % path)
+        info = self.getinfo(path)
+
+        return os.path.join(self.tempdir, info.object_id)
+
+    def check_filecache(self, path):
+        '''Determine whether an identical file exists in the filecache
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        :returns: `bool`
+        '''
+        path = path.decode('utf_8')
+        self.log.debug("check_filecache: path %s" % path)
+        info = self.getinfo(path)
+
+        try:
+            dpath = self.cache_path(path)
+            r_size = info.size
+            l_size = os.stat(dpath)[6]
+            if r_size == l_size:
+                with open(dpath, 'r') as dfile:
+                    r_md5 = info.md5
+                    l_md5 = hashlib.md5(dfile.read()).hexdigest()
+                    return (r_md5 == l_md5)
+        except OSError:
+            # file does not exist in cache
+            return False
+
+    def read_filecache(self, path):
+        '''Reads a file from the filecache (basically translating an ACD path into bytes)
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        :returns: file data
+        '''
+        path = path.decode('utf_8')
+        self.log.debug("read_filecache: path %s" % path)
+        info = self.getinfo(path)
+
+        with open(self.cache_path(path), 'rb') as dfile:
+            self.log.debug("  Reading data from %s" % self.cache_path(path))
+            return dfile.read()
+
+    def write_filecache(self, path, data):
+        '''Writes a file into the filecache in preparation for uploading to ACD
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        '''
+        path = path.decode('utf_8')
+        self.log.debug("write_filecache: path %s" % path)
+        info = self.getinfo(path)
+
+        if self.check_filecache(path):
+            self.log.info("  Skipping write because file already cached")
+            return
+
+        with open(self.cache_path(path), 'ab') as dfile:
+            self.log.debug("  Writing data to %s" % self.cache_path(path))
+            dfile.write(data)
+
+    def clear_filecache(self, path):
+        '''Removes a file from the filecache (used when it's deleted in ACD
+
+        :param path: Full path and filename in ACD
+        :type path: str
+        '''
+        path = path.decode('utf_8')
+        self.log.debug("clear_filecache: path %s" % path)
+        info = self.getinfo(path)
+
+        dpath = self.cache_path(path)
+        if os.path.exists(dpath):
+            self.log.info("  Clearing cache %s" % dpath)
+            os.unlink(dpath)
+
+    #####
+    # Standard FUSE methods
+    #####
     def statfs(self):
         blocksize = 1
         storage = self.api.get_user_storage()
@@ -75,6 +203,7 @@ class ACDFS(fuse.Fuse):
 
     def getattr(self, path):
         path = path.decode('utf_8')
+        self.log.debug("getattr: path %s" % path)
 
         head, tail = os.path.split(path)
         nopaths = ['.git', 'objects']
@@ -105,6 +234,7 @@ class ACDFS(fuse.Fuse):
 
     def readdir(self, path, offset):
         path = path.decode('utf_8')
+        self.log.debug("readdir: path %s, offset %s" % (path, offset))
 
         yield fuse.Direntry('.')
         yield fuse.Direntry('..')
@@ -126,32 +256,37 @@ class ACDFS(fuse.Fuse):
 
     def read(self, path, size, offset):
         path = path.decode('utf_8')
+        self.log.debug("read: path %s, size %s, offset %s" % (path, str(size), str(offset)))
 
-        if not self.api.can_device_download():
+        if not self.download:
             return -EPERM
 
         data = None
-        if path not in self.filecache:
-            info = self.getinfo(path)
-            self.filecache[path] = self.api.download_by_id(info.object_id)
+        info = self.getinfo(path)
+        try:
+            self.log.info("Trying to read data from filecache for %s" % path)
+            data = self.read_filecache(path)
+        except IOError:
+            self.log.info("Filecache failed; downloading")
+            data = self.api.download_by_id(info.object_id)
+            self.write_filecache(path, data)
 
-        data = self.filecache[path]
         file_size = len(data)
         if offset < file_size:
             if offset + size > file_size:
                 size = file_size - offset
             return data[offset:offset+size]
         else:
-            if not self.cache:
-                filecache.pop(path)
             return ''
 
     def unlink(self, path):
         path = path.decode('utf_8')
+        self.log.debug("unlink: path %s" % path)
 
         info = self.getinfo(path)
         self.api.remove_bulk_by_id([info.object_id])
         head, tail = os.path.split(path)
+        self.clear_filecache(path)
         if path in self.infocache:
             self.infocache.pop(path)
         if head in self.dircache:
@@ -159,10 +294,12 @@ class ACDFS(fuse.Fuse):
 
     def rmdir(self, path):
         path = path.decode('utf_8')
+        self.log.debug("rmdir: path %s" % path)
         self.unlink(path)
 
     def mkdir(self, path, mode):
         path = path.decode('utf_8')
+        self.log.debug("mkdir: path %s, mode %s" % (path, mode))
 
         head, tail = os.path.split(path)
         newdir = self.api.create_by_path(head, tail, Type=pyacd.types.FOLDER)
@@ -171,20 +308,21 @@ class ACDFS(fuse.Fuse):
         if head in self.dircache:
             self.dircache.pop(head)
 
-    def rename(self, path1, path2):
-        path1 = path1.decode('utf_8')
-        path2 = path2.decode('utf_8')
+    def rename(self, srcpath, dstpath):
+        srcpath = srcpath.decode('utf_8')
+        dstpath = dstpath.decode('utf_8')
+        self.log.debug("rename: srcpath %s, dstpath %s" % (srcpath, dstpath))
 
-        head, tail = os.path.split(path2)
+        srcinfo = self.getinfo(srcpath)
+        dsthead, dsttail = os.path.split(dstpath)
+        dstinfo = self.getinfo(dsthead)
 
-        info1 = self.getinfo(path1)
-        dirinfo = self.getinfo(head)
-        result = self.api.move_by_id(info1.object_id, dirinfo.object_id, tail)
+        self.api.move_by_id(srcinfo.object_id, dstinfo.object_id, dsttail, overwrite=True)
 
-        if path1 in self.infocache:
-            self.infocache.pop(path1)
-        if head in self.dircache:
-            self.dircache.pop(head)
+        if srcpath in self.infocache:
+            self.infocache.pop(srcpath)
+        if dsthead in self.dircache:
+            self.dircache.pop(dsthead)
 
     def chmod(self, path, mode):
         return 0
@@ -192,58 +330,92 @@ class ACDFS(fuse.Fuse):
         return 0
     def utime(self, path, times):
         return 0
+    def truncate(self, path, size):
+        path = path.decode('utf_8')
+        self.log.debug("truncate: path %s, size %s" % (path, str(size)))
+        head, tail = os.path.split(path)
+
+        info = self.getinfo(path)
+        if size == 0:
+            print "clearing filecache", path
+            self.clear_filecache(path)
+
+        return 0
 
     def create(self, path, flags, mode):
         path = path.decode('utf_8')
+        self.log.debug("create: path %s, flags %s, mode %s" % (path, flags, mode))
 
         head, tail = os.path.split(path)
         self.infocache[path] = self.api.create_by_path(head, tail)
 
     def write(self, path, buf, offset):
         path = path.decode('utf_8')
+        self.log.debug("write: path %s, offset %s" % (path, str(offset)))
 
-        if path not in self.filecache:
-            self.filecache[path] = buf
-        else:
-            self.filecache[path] += buf
+        self.log.debug("Starting write of %s" % path)
+        self.write_filecache(path, buf)
         return len(buf)
 
     def flush(self, path):
-        pass
+        path = path.decode('utf_8')
+        self.log.debug("flush: path %s" % path)
 
-    def release(self, path, flags):
-        buf = None
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
-        newfile = self.infocache[path]
-        if newfile.status == "PENDING":
-            buf = self.filecache[path]
-            url = self.api.get_upload_url_by_id(newfile.object_id, len(buf))
-            result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename, buf)
-            result = self.api.complete_file_upload_by_id(url.object_id, url.storage_key)
 
-        if dirname in self.dircache:
-            self.dircache.pop(dirname)
-        if path in self.infocache:
-            self.infocache.pop(path)
-        if path in self.filecache:
-            self.filecache.pop(path)
-        return buf and len(buf) or 0
+        try:
+            info = self.getinfo(path)
+            if self.check_filecache(path):
+                # we're all good; the remote size and MD5 match the filecache's
+                self.log.debug("filecache matches; we're done here")
+                return 0
+            else:
+                self.log.debug("flush: reading filecache for %s" % path)
+                buf = self.read_filecache(path)
+                blen = len(buf)
+                url = self.api.get_upload_url_by_id(info.object_id, blen)
+                result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename, buf)
+                result = self.api.complete_file_upload_by_id(url.object_id, url.storage_key)
+                if dirname in self.dircache:
+                    self.dircache.pop(dirname)
+                if path in self.infocache:
+                    self.infocache.pop(path)
+                return 0
 
+        except pyacd.exception.PyAmazonCloudDriveError:
+            # file does not exist; this should never happen since create() creates it
+            pass
+
+        return -ENOENT
+
+    def release(self, path, flags):
+        path = path.decode('utf_8')
+        self.log.debug("release: path %s, flags %s" % (path, flags))
+
+        try:
+            info = self.getinfo(path)
+            if not self.check_filecache(path):
+                self.log.debug("flush: reading filecache for %s" % path)
+                buf = self.read_filecache(path)
+                return len(buf)
+            else:
+                return len(self.read_filecache(path))
+        except pyacd.exception.PyAmazonCloudDriveError:
+             # file does not exist; this should never happen since create() creates it
+            pass
+
+        return 0
 
 if __name__ == '__main__':
     fs = ACDFS()
     fs.flags = 0
     fs.multithreaded = 0
 
-    fs.parser.add_option(mountopt="cache", metavar="CACHE",
-                         help="keep downloaded files in memory for quicker re-download")
     fs.parser.add_option(mountopt="email", metavar="EMAIL",
                          help="EMAIL login for Amazon Cloud Drive")
     fs.parser.add_option(mountopt="password", metavar="PASSWORD",
                          help="PASSWORD password for Amazon Cloud Drive")
-    fs.parser.add_option(mountopt="sessionfile", metavar="SESSION",
-                         help="Cached session file, to avoid reaching eight-device limit")
 
     fs.parse(values=fs, errex=1)
     fs.main()

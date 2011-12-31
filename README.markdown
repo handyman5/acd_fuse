@@ -1,6 +1,27 @@
+NEWS
+====
+
+2011-12-31
+----------
+I've made some significant updates to `acd_fuse`. Its functionality is expanded, and I now believe it to be ready for prime time.
+
+Changes:
+
+- On-disk file caching!
+  - Transferred files are cached to a `temfile.gettempdir()` path for faster re-uploads and re-downloads
+  - File caches persist between filesystem invocations and detect when the remote file has changed
+- Implemented debug logging to a file, rather than the console
+  - Default log file is `/tmp/acd_fuse/debug.log`
+- Automatically save and restore session information in a `tempfile.gettempdir()` path; no config option necessary
+  - Default session file is `/tmp/acd_fuse/sessionfile`
+- Session information now saved in JSON format, and no longer includes login name and password
+- rsync now supported cleanly and without hacks, although you'll need to use `--inplace` to use the file caching feature
+- Eight-device limit issue _may_ be resolved; this requires further testing
+- Various performance improvements
+
 Introduction
 ============
-acd_fuse is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](http://code.google.com/p/pyamazonclouddrive/). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files if the --size-only flag is provided (since you can't change mtimes on Cloud Drive).
+`acd_fuse` is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](http://code.google.com/p/pyamazonclouddrive/). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files.
 
 Standard Disclaimer
 ===================
@@ -8,7 +29,7 @@ This filesystem is **EXPERIMENTAL** and may **EAT YOUR BABIES** etc. I am not re
 
 ACTUAL THING YOU SHOULD WORRY ABOUT
 ===================================
-Amazon Cloud Drive [limits you to eight devices](http://www.amazon.com/gp/help/customer/display.html/ref=hp_200143320_dlimits?nodeId=200656220#devicelimit) on your account, total, ever. It seems to be the case that loading up this filesystem counts against that limit (although possibly it doesn't start counting until you attempt to download a file). This is what the `sessionfile` mount option is for; if the sessionfile is provided, acd_fuse will store a Python pickle of its session object there and re-use it in the future. I'm not sure about how the interaction works, but I locked out my test account, so **BE CAREFUL** about using this with an account you care about! Also please note, the login name and password are stored **unencrypted** in the session file, so keep it safe.
+Amazon Cloud Drive [limits you to eight devices](http://www.amazon.com/gp/help/customer/display.html/ref=hp_200143320_dlimits?nodeId=200656220#devicelimit) on your account, total, ever. It seems to be the case that loading up this filesystem counts against that limit (although possibly it doesn't start counting until you attempt to download a file). `acd_fuse` attempts to mitigate this by storing your login information (cookies and such) in a session file which is automatically populated and re-used between sessions. I think this problem is resolved, but I locked out my test account, so **BE CAREFUL** about using this with an account you care about!
 
 Requirements
 ============
@@ -25,8 +46,6 @@ Mount Options
 -------------
 - `email`: your Amazon Cloud Drive login email
 - `password`: your Amazon Cloud Drive login password
-- `sessionfile`: the full path of a file to store the session cookie in
-- `cache`: whether to cache downloaded files in memory, so "re-downloading" them is instantaneous. Downside: uses way more memory.
 
 License
 =======
