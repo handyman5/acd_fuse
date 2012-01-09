@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from errno import *
+from glob import glob
 from stat import S_IFDIR, S_IFREG
 from time import time
 import fuse
@@ -30,6 +31,7 @@ log = logging.getLogger(myname)
 class ACDFS(fuse.Fuse):
     api = None
     cache = None
+    cachefree = 10
     download = None
     email = None
     log = None
@@ -170,7 +172,7 @@ class ACDFS(fuse.Fuse):
             dfile.write(data)
 
     def clear_filecache(self, path):
-        '''Removes a file from the filecache (used when it's deleted in ACD
+        '''Removes a file from the filecache (used when it's deleted in ACD)
 
         :param path: Full path and filename in ACD
         :type path: str
@@ -183,6 +185,33 @@ class ACDFS(fuse.Fuse):
         if os.path.exists(dpath):
             self.log.info("  Clearing cache %s" % dpath)
             os.unlink(dpath)
+
+    def gc_filecache(self):
+        '''Runs a garbage collection on the filecache
+
+        In order to prevent the filecache from growing without bound,
+        this function will remove the least recently used files until the
+        disk the filecache is on is below the fullness threshold.
+        '''
+        while True:
+            disk = os.statvfs(self.tempdir)
+            available = float(disk.f_bsize * disk.f_bavail)
+            capacity = float(disk.f_bsize * disk.f_blocks)
+            percent_free = (available / capacity) * 100
+
+            self.log.info("gc_filecache: percent_free: %f; self.cachefree: %f" % (percent_free, self.cachefree))
+
+            if percent_free > self.cachefree:
+                break
+
+            files = glob(self.tempdir + "/*-*-*-*-*")
+            if not files:
+                break
+
+            files.sort(key=lambda x: os.path.getmtime(x))
+            victim = files[-1]
+            self.log.info("  removing file %s" % victim)
+            os.unlink(victim)
 
     #####
     # Standard FUSE methods
@@ -393,6 +422,8 @@ class ACDFS(fuse.Fuse):
         path = path.decode('utf_8')
         self.log.debug("release: path %s, flags %s" % (path, flags))
 
+        self.gc_filecache()
+
         try:
             info = self.getinfo(path)
             if not self.check_filecache(path):
@@ -412,10 +443,17 @@ if __name__ == '__main__':
     fs.flags = 0
     fs.multithreaded = 0
 
+    fs.fuse_args.add('big_writes')
+    fs.fuse_args.add('large_read')
+    fs.fuse_args.add('direct_io')
+
     fs.parser.add_option(mountopt="email", metavar="EMAIL",
                          help="EMAIL login for Amazon Cloud Drive")
     fs.parser.add_option(mountopt="password", metavar="PASSWORD",
                          help="PASSWORD password for Amazon Cloud Drive")
+    fs.parser.add_option(mountopt="cachefree",
+                         help="What percentage of the filecache drive we must keep free (defaults to 10%)")
 
     fs.parse(values=fs, errex=1)
+
     fs.main()

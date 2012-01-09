@@ -1,6 +1,13 @@
 NEWS
 ====
 
+2012-01-09
+----------
+Some big performance improvements to `acd_fuse` in this update. Specifically:
+
+- The on-disk filecache now has a garbage collection routine that will prevent it from filling the entire filesystem it lives on. By default, it will kick on and start cleaning up files when that filesystem gets below 10% free space; you can change this behavior with the mount option `cachefree`
+- The FUSE mount options `direct_io`, `big_writes`, and `large_read` are now enabled by default (and cannot, actually, be disabled). If I'm to be 100% honest, I'm not really sure what the full significance of each of these options is; but I have noticed significant speed improvements with them enabled.
+
 2011-12-31
 ----------
 I've made some significant updates to `acd_fuse`. Its functionality is expanded, and I now believe it to be ready for prime time.
@@ -46,6 +53,7 @@ Mount Options
 -------------
 - `email`: your Amazon Cloud Drive login email
 - `password`: your Amazon Cloud Drive login password
+- `cachefree`: the percentage of free space to maintain on the filecache's file system; *10* by default
 
 License
 =======
