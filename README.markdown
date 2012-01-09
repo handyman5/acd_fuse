@@ -15,7 +15,7 @@ I've made some significant updates to `acd_fuse`. Its functionality is expanded,
 Changes:
 
 - On-disk file caching!
-  - Transferred files are cached to a `temfile.gettempdir()` path for faster re-uploads and re-downloads
+  - Transferred files are cached to a `tempfile.gettempdir()` path for faster re-uploads and re-downloads
   - File caches persist between filesystem invocations and detect when the remote file has changed
 - Implemented debug logging to a file, rather than the console
   - Default log file is `/tmp/acd_fuse/debug.log`
