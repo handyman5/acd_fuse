@@ -41,6 +41,9 @@ Amazon Cloud Drive [limits you to eight devices](http://www.amazon.com/gp/help/c
 Requirements
 ============
 - Tested with Python 2.6 on Ubuntu 10.04; it might possibly work elsewhere. Let me know!
+  - Works on Gentoo: `emerge fuse-python`
+  - Works on Amazon (AMI) Linux: `yum install fuse-python`
+  - Works with Python 2.7 (but not 3.x yet)
 - [Python-FUSE](http://sourceforge.net/apps/mediawiki/fuse/index.php?title=FUSE_Python_tutorial) and its dependencies (libfuse, kernel support, etc.)
 
 Usage
