@@ -90,11 +90,11 @@ class ACDFS(fuse.Fuse):
         :type path: str
         :returns: an Info object representing the path
         '''
-        path = path.decode('utf_8')
-        self.log.debug("getinfo: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"getinfo: path %s" % path)
         if path not in self.infocache:
-            self.log.debug("  lookup failed for path %s" % path)
-            info = self.api.get_info_by_path(path)
+            self.log.debug(u"  lookup failed for path %s" % path)
+            info = self.api.get_info_by_path(path.encode('utf_8'))
             self.infocache[path] = info
         return self.infocache[path]
 
@@ -108,8 +108,8 @@ class ACDFS(fuse.Fuse):
         :type path: str
         :returns: the local path to the cached file
         '''
-        path = path.decode('utf_8')
-        self.log.debug("check_filecache: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"check_filecache: path %s" % path)
         info = self.getinfo(path)
 
         return os.path.join(self.tempdir, info.object_id)
@@ -121,8 +121,8 @@ class ACDFS(fuse.Fuse):
         :type path: str
         :returns: `bool`
         '''
-        path = path.decode('utf_8')
-        self.log.debug("check_filecache: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"check_filecache: path %s" % path)
         info = self.getinfo(path)
 
         try:
@@ -145,12 +145,12 @@ class ACDFS(fuse.Fuse):
         :type path: str
         :returns: file data
         '''
-        path = path.decode('utf_8')
-        self.log.debug("read_filecache: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"read_filecache: path %s" % path)
         info = self.getinfo(path)
 
         with open(self.cache_path(path), 'rb') as dfile:
-            self.log.debug("  Reading data from %s" % self.cache_path(path))
+            self.log.debug(u"  Reading data from %s" % self.cache_path(path))
             return dfile.read()
 
     def write_filecache(self, path, data):
@@ -159,8 +159,8 @@ class ACDFS(fuse.Fuse):
         :param path: Full path and filename in ACD
         :type path: str
         '''
-        path = path.decode('utf_8')
-        self.log.debug("write_filecache: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"write_filecache: path %s" % path)
         info = self.getinfo(path)
 
         if self.check_filecache(path):
@@ -168,7 +168,7 @@ class ACDFS(fuse.Fuse):
             return
 
         with open(self.cache_path(path), 'ab') as dfile:
-            self.log.debug("  Writing data to %s" % self.cache_path(path))
+            self.log.debug(u"  Writing data to %s" % self.cache_path(path))
             dfile.write(data)
 
     def clear_filecache(self, path):
@@ -177,8 +177,8 @@ class ACDFS(fuse.Fuse):
         :param path: Full path and filename in ACD
         :type path: str
         '''
-        path = path.decode('utf_8')
-        self.log.debug("clear_filecache: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"clear_filecache: path %s" % path)
         info = self.getinfo(path)
 
         dpath = self.cache_path(path)
@@ -231,11 +231,11 @@ class ACDFS(fuse.Fuse):
         return myfs
 
     def getattr(self, path):
-        path = path.decode('utf_8')
-        self.log.debug("getattr: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"getattr: path %s" % path)
 
         head, tail = os.path.split(path)
-        nopaths = ['.git', 'objects']
+        nopaths = [u'.git', u'objects']
         if tail in nopaths:
             return -ENOENT
 
@@ -262,8 +262,8 @@ class ACDFS(fuse.Fuse):
         else: return -ENOENT
 
     def readdir(self, path, offset):
-        path = path.decode('utf_8')
-        self.log.debug("readdir: path %s, offset %s" % (path, offset))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"readdir: path %s, offset %s" % (path, offset))
 
         yield fuse.Direntry('.')
         yield fuse.Direntry('..')
@@ -277,15 +277,15 @@ class ACDFS(fuse.Fuse):
                 raise StopIteration
 
             folder = self.api.list_by_id(info.object_id)
-            names = [x.name.encode('utf8', 'replace') for x in folder.objects]
+            names = [x.name.encode('utf_8', 'replace') for x in folder.objects]
             self.dircache[path] = names
 
             for x in names:
                 yield fuse.Direntry(x)
 
     def read(self, path, size, offset):
-        path = path.decode('utf_8')
-        self.log.debug("read: path %s, size %s, offset %s" % (path, str(size), str(offset)))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"read: path %s, size %d, offset %d" % (path, size, offset))
 
         if not self.download:
             return -EPERM
@@ -309,8 +309,8 @@ class ACDFS(fuse.Fuse):
             return ''
 
     def unlink(self, path):
-        path = path.decode('utf_8')
-        self.log.debug("unlink: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"unlink: path %s" % path)
 
         info = self.getinfo(path)
         self.api.remove_bulk_by_id([info.object_id])
@@ -322,16 +322,16 @@ class ACDFS(fuse.Fuse):
             self.dircache.pop(head)
 
     def rmdir(self, path):
-        path = path.decode('utf_8')
-        self.log.debug("rmdir: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"rmdir: path %s" % path)
         self.unlink(path)
 
     def mkdir(self, path, mode):
-        path = path.decode('utf_8')
-        self.log.debug("mkdir: path %s, mode %s" % (path, mode))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"mkdir: path %s, mode %s" % (path, mode))
 
         head, tail = os.path.split(path)
-        newdir = self.api.create_by_path(head, tail, Type=pyacd.types.FOLDER)
+        newdir = self.api.create_by_path(head.encode('utf_8'), tail.encode('utf_8'), Type=pyacd.types.FOLDER)
         if path in self.infocache:
             self.infocache.pop(path)
         if head in self.dircache:
@@ -340,13 +340,13 @@ class ACDFS(fuse.Fuse):
     def rename(self, srcpath, dstpath):
         srcpath = srcpath.decode('utf_8')
         dstpath = dstpath.decode('utf_8')
-        self.log.debug("rename: srcpath %s, dstpath %s" % (srcpath, dstpath))
+        self.log.debug(u"rename: srcpath %s, dstpath %s" % (srcpath, dstpath))
 
         srcinfo = self.getinfo(srcpath)
         dsthead, dsttail = os.path.split(dstpath)
         dstinfo = self.getinfo(dsthead)
 
-        self.api.move_by_id(srcinfo.object_id, dstinfo.object_id, dsttail, overwrite=True)
+        self.api.move_by_id(srcinfo.object_id, dstinfo.object_id, dsttail.encode('utf_8'), overwrite=True)
 
         if srcpath in self.infocache:
             self.infocache.pop(srcpath)
@@ -360,35 +360,35 @@ class ACDFS(fuse.Fuse):
     def utime(self, path, times):
         return 0
     def truncate(self, path, size):
-        path = path.decode('utf_8')
-        self.log.debug("truncate: path %s, size %s" % (path, str(size)))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"truncate: path %s, size %d" % (path, size))
         head, tail = os.path.split(path)
 
         info = self.getinfo(path)
         if size == 0:
-            print "clearing filecache", path
+            print u"clearing filecache", path
             self.clear_filecache(path)
 
         return 0
 
     def create(self, path, flags, mode):
-        path = path.decode('utf_8')
-        self.log.debug("create: path %s, flags %s, mode %s" % (path, flags, mode))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"create: path %s, flags %s, mode %s" % (path, flags, mode))
 
         head, tail = os.path.split(path)
-        self.infocache[path] = self.api.create_by_path(head, tail)
+        self.infocache[path] = self.api.create_by_path(head.encode('utf_8'), tail.encode('utf_8'))
 
     def write(self, path, buf, offset):
-        path = path.decode('utf_8')
-        self.log.debug("write: path %s, offset %s" % (path, str(offset)))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"write: path %s, offset %d" % (path, offset))
 
-        self.log.debug("Starting write of %s" % path)
+        self.log.debug(u"Starting write of %s" % path)
         self.write_filecache(path, buf)
         return len(buf)
 
     def flush(self, path):
-        path = path.decode('utf_8')
-        self.log.debug("flush: path %s" % path)
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"flush: path %s" % path)
 
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
@@ -397,14 +397,14 @@ class ACDFS(fuse.Fuse):
             info = self.getinfo(path)
             if self.check_filecache(path):
                 # we're all good; the remote size and MD5 match the filecache's
-                self.log.debug("filecache matches; we're done here")
+                self.log.debug(u"filecache matches; we're done here")
                 return 0
             else:
-                self.log.debug("flush: reading filecache for %s" % path)
+                self.log.debug(u"flush: reading filecache for %s" % path)
                 buf = self.read_filecache(path)
                 blen = len(buf)
                 url = self.api.get_upload_url_by_id(info.object_id, blen)
-                result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename, buf)
+                result = self.api.upload(url.http_request.end_point, url.http_request.parameters, basename.encode('utf_8'), buf)
                 result = self.api.complete_file_upload_by_id(url.object_id, url.storage_key)
                 if dirname in self.dircache:
                     self.dircache.pop(dirname)
@@ -419,15 +419,15 @@ class ACDFS(fuse.Fuse):
         return -ENOENT
 
     def release(self, path, flags):
-        path = path.decode('utf_8')
-        self.log.debug("release: path %s, flags %s" % (path, flags))
+        path = isinstance(path, unicode) and path or path.decode('utf_8')
+        self.log.debug(u"release: path %s, flags %s" % (path, flags))
 
         self.gc_filecache()
 
         try:
             info = self.getinfo(path)
             if not self.check_filecache(path):
-                self.log.debug("flush: reading filecache for %s" % path)
+                self.log.debug(u"flush: reading filecache for %s" % path)
                 buf = self.read_filecache(path)
                 return len(buf)
             else:

@@ -1,5 +1,12 @@
 NEWS
 ====
+2012-03-01
+----------
+New feature: proper Unicode support!
+
+I ran into trouble while uploading my MP3 collection, as some files have non-ASCII filenames. This update should properly support those filenames. Logging and error messages should also properly display Unicode data as well.
+
+Realistically, I always find Unicode support to be kind of a crapshoot; if you find a filename that `acd_fuse` can't handle, please open an [issue](https://github.com/handyman5/acd_fuse/issues) with the name so I can try to replicate and fix the problem. Standard disclaimers about data-eating *definitely* apply.
 
 2012-01-09
 ----------
@@ -22,13 +29,13 @@ Changes:
 - Automatically save and restore session information in a `tempfile.gettempdir()` path; no config option necessary
   - Default session file is `/tmp/acd_fuse/sessionfile`
 - Session information now saved in JSON format, and no longer includes login name and password
-- rsync now supported cleanly and without hacks, although you'll need to use `--inplace` to use the file caching feature
+- rsync now supported cleanly and without hacks, although you'll need to use `--inplace` to use the file caching feature (and `--size-only` avoids copying the files to the disk cache for a significant speedup if you don't expect another cache hit)
 - Eight-device limit issue _may_ be resolved; this requires further testing
 - Various performance improvements
 
 Introduction
 ============
-`acd_fuse` is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](http://code.google.com/p/pyamazonclouddrive/). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files.
+`acd_fuse` is a FUSE filesystem driver for Amazon's Cloud Drive. It uses the [PyAmazonCloudDrive API library](http://code.google.com/p/pyamazonclouddrive/). It supports pretty much everything Cloud Drive does, e.g. directory navigation and file uploading/downloading, but not file permissions. In particular, it supports using rsync to transfer files, and also Unicode filenames.
 
 Standard Disclaimer
 ===================
@@ -42,7 +49,7 @@ Requirements
 ============
 - Tested with Python 2.6 on Ubuntu 10.04; it might possibly work elsewhere. Let me know!
   - Works on Gentoo: `emerge fuse-python`
-  - Works on Amazon (AMI) Linux: `yum install fuse-python`
+  - Works on Amazon (AMI) Linux: `yum install fuse fuse-python`
   - Works with Python 2.7 (but not 3.x yet)
 - [Python-FUSE](http://sourceforge.net/apps/mediawiki/fuse/index.php?title=FUSE_Python_tutorial) and its dependencies (libfuse, kernel support, etc.)
 
