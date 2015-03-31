@@ -1,5 +1,17 @@
 NEWS
 ====
+2015-03-31
+----------
+**IT LIVES**
+
+Since Amazon recently announced unlimited Cloud Drive storage for $60/year, I've gotten several notes asking me to revive this project. Who am I to deny the people what they want? :-)
+
+I've made a couple of changes to the pyacd upstream module, both incorporating the latest version from upstream and adding a couple of tweaks myself to get things working with the new redesign of the login page. I also incorporated [ian1roberts'](https://github.com/ian1roberts) changes from [issue #2](https://github.com/handyman5/acd_fuse/issues/2); thanks for those!
+
+At this point the driver appears to be working again (although my testing has been very limited). I'll try and make the time in the near future to make some more improvements, including perhaps refactoring some of the common code in the pyacd module and making a pass on `acd_fuse` itself to see if there's anything I've learned to do better in the intervening three years.
+
+If things are still not working for you after this update, or if there are any other features you'd like to see, please open an [issue](https://github.com/handyman5/acd_fuse/issues) so I can take a look.
+
 2012-03-01
 ----------
 New feature: proper Unicode support!
