@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import os.path
+import pickle
 import tempfile
 
 try:
@@ -64,10 +65,12 @@ class ACDFS(fuse.Fuse):
     def main(self):
         try:
             print "Trying to login from cached sessionfile %s" % self.sessionfile
-            with open(self.sessionfile, "r") as sessfile:
+            with open(self.sessionfile, "rb") as sessfile:
                 session = pyacd.auth.Session()
-                session.__dict__ = json.load(sessfile)
+                session.__dict__ = pickle.load(sessfile)
                 self.session = pyacd.login(session=session)
+                self.session.__dict__['agreed_with_terms']=True
+                self.session.username = self.email
             if not self.session.is_valid() or not self.session.is_logined():
                 raise ValueError
         except (IOError, ValueError, pyacd.exception.PyAmazonCloudDriveError):
@@ -75,9 +78,11 @@ class ACDFS(fuse.Fuse):
             if not self.email or not self.password:
                 # if no email or password and they're needed, error out and die
                 raise ValueError("No login information provided; try again with mount options 'email' and 'password'")
-            with open(self.sessionfile, "w") as sessfile:
+            with open(self.sessionfile, "wb") as sessfile:
                 self.session = pyacd.login(self.email, self.password)
-                json.dump(self.session.__dict__, sessfile)
+                self.session.__dict__['agreed_with_terms']=True
+                self.session.username = self.email
+                pickle.dump(self.session.__dict__, sessfile)
         print "Login successful; starting filesystem"
         self.download = self.api.can_device_download()
 
