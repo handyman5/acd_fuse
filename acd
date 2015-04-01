@@ -71,7 +71,7 @@ class ACDFS(fuse.Fuse):
                 self.session = pyacd.login(session=session)
                 self.session.__dict__['agreed_with_terms']=True
                 self.session.username = self.email
-            if not self.session.is_valid() or not self.session.is_logined():
+            if not self.session.is_logged_in():
                 raise ValueError
         except (IOError, ValueError, pyacd.exception.PyAmazonCloudDriveError):
             print "Cached session failed; trying auth login"
