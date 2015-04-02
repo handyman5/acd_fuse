@@ -25,7 +25,7 @@ Realistically, I always find Unicode support to be kind of a crapshoot; if you f
 Some big performance improvements to `acd_fuse` in this update. Specifically:
 
 - The on-disk filecache now has a garbage collection routine that will prevent it from filling the entire filesystem it lives on. By default, it will kick on and start cleaning up files when that filesystem gets below 10% free space; you can change this behavior with the mount option `cachefree`
-- The FUSE mount options `direct_io`, `big_writes`, and `large_read` are now enabled by default (and cannot, actually, be disabled). If I'm to be 100% honest, I'm not really sure what the full significance of each of these options is; but I have noticed significant speed improvements with them enabled.
+- The FUSE mount options `direct_io` and `big_writes` are now enabled by default (and cannot, actually, be disabled). If I'm to be 100% honest, I'm not really sure what the full significance of each of these options is; but I have noticed significant speed improvements with them enabled.
 
 2011-12-31
 ----------
@@ -69,7 +69,7 @@ Usage
 =====
 Standard FUSE mountpoint stuff:
 
-    acd <mountpoint> -o<options>
+    acd <mountpoint> -o<option1>=<value1>,<option2>=<value2>
 
 Mount Options
 -------------
