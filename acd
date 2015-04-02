@@ -449,7 +449,6 @@ if __name__ == '__main__':
     fs.multithreaded = 0
 
     fs.fuse_args.add('big_writes')
-    fs.fuse_args.add('large_read')
     fs.fuse_args.add('direct_io')
 
     fs.parser.add_option(mountopt="email", metavar="EMAIL",
