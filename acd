@@ -114,7 +114,7 @@ class ACDFS(fuse.Fuse):
         :returns: the local path to the cached file
         '''
         path = isinstance(path, unicode) and path or path.decode('utf_8')
-        self.log.debug(u"check_filecache: path %s" % path)
+        self.log.debug(u"cache_path: path %s" % path)
         info = self.getinfo(path)
 
         return os.path.join(self.tempdir, info.object_id)
