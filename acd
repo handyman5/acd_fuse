@@ -447,7 +447,7 @@ class ACDFS(fuse.Fuse):
 if __name__ == '__main__':
     if os.geteuid() == 0:
         print "Do not run me as root or with sudo!"
-        sys.exit(1)
+        exit(1)
 
     fs = ACDFS()
     fs.flags = 0
