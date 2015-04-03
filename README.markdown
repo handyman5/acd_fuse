@@ -2,6 +2,13 @@ NEWS
 ====
 2015-03-31
 ----------
+(**Update**: Several people have reported some common issues with this tool. If you're having trouble, please try these steps:
+
+* Remove the cached session (generally in /tmp/acd_fuse/sessionfile)
+* Don't run the tool with sudo or as root
+
+I've updated it to attempt to handle these cases, but FYI.)
+
 **IT LIVES**
 
 Since Amazon recently announced unlimited Cloud Drive storage for $60/year, I've gotten several notes asking me to revive this project. Who am I to deny the people what they want? :-)

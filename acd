@@ -4,6 +4,7 @@ from copy import deepcopy
 from errno import *
 from glob import glob
 from stat import S_IFDIR, S_IFREG
+from sys import exit
 from time import time
 import fuse
 import hashlib
@@ -73,7 +74,7 @@ class ACDFS(fuse.Fuse):
                 self.session.username = self.email
             if not self.session.is_logged_in():
                 raise ValueError
-        except (IOError, ValueError, pyacd.exception.PyAmazonCloudDriveError):
+        except (AttributeError, IOError, ValueError, pyacd.exception.PyAmazonCloudDriveError):
             print "Cached session failed; trying auth login"
             if not self.email or not self.password:
                 # if no email or password and they're needed, error out and die
@@ -444,6 +445,10 @@ class ACDFS(fuse.Fuse):
         return 0
 
 if __name__ == '__main__':
+    if os.geteuid() == 0:
+        print "Do not run me as root or with sudo!"
+        sys.exit(1)
+
     fs = ACDFS()
     fs.flags = 0
     fs.multithreaded = 0
